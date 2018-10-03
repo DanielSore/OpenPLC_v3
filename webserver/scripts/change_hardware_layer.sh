@@ -80,6 +80,13 @@ elif [ "$1" == "unipi" ]; then
     echo rpi > ../scripts/openplc_platform
     echo unipi > ../scripts/openplc_driver
 
+elif [ "$1" == "toradex" ]; then
+    echo "Activating Toradex driver"
+    cp ./hardware_layers/toradex.cpp ./hardware_layer.cpp
+    echo "Setting Platform"
+    echo toradex > ../scripts/openplc_platform
+    echo toradex > ../scripts/openplc_driver
+
 else
     echo "Error: Invalid hardware layer"
 fi

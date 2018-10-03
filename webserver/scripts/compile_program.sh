@@ -113,6 +113,35 @@ elif [ "$OPENPLC_PLATFORM" = "rpi" ]; then
     fi
     echo "Compilation finished successfully!"
     exit 0
+
+elif [ "$OPENPLC_PLATFORM" = "toradex" ]; then
+    echo "Compiling for Toradex"
+    export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+    echo "Generating object files..."
+    g++ -std=gnu++11 -I ./lib -c Config0.c -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w
+    if [ $? -ne 0 ]; then
+        echo "Error compiling C files"
+        echo "Compilation finished with errors!"
+        exit 1
+    fi
+    g++ -std=gnu++11 -I ./lib -c Res0.c -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w
+    if [ $? -ne 0 ]; then
+        echo "Error compiling C files"
+        echo "Compilation finished with errors!"
+        exit 1
+    fi
+    echo "Generating glueVars..."
+    ./glue_generator
+    echo "Compiling main program..."
+    g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -lsoc -lpthread -fpermissive `pkg-config --cflags --libs libmodbus` -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w
+    if [ $? -ne 0 ]; then
+        echo "Error compiling C files"
+        echo "Compilation finished with errors!"
+        exit 1
+    fi
+    echo "Compilation finished successfully!"
+    exit 0
+
 else
     echo "Error: Undefined platform! OpenPLC can only compile for Windows, Linux and Raspberry Pi environments"
     echo "Compilation finished with errors!"

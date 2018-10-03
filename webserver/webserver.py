@@ -1299,6 +1299,8 @@ def hardware():
             else: return_str += "<option value='simulink_linux'>Simulink with DNP3 (Linux only)</option>"
             if (current_driver == "unipi"): return_str += "<option selected='selected' value='unipi'>UniPi v1.1</option>"
             else: return_str += "<option value='unipi'>UniPi v1.1</option>"
+            if (current_driver == "toradex"): return_str += "<option selected='selected' value='toradex'>Toradex Colibri iMX6</option>"
+            else: return_str += "<option value='toradex'>Toradex Colibri iMX6</option>"
             return_str += """
                         </select>
                         <br>
