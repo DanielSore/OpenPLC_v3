@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/time.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
 
@@ -41,17 +42,16 @@
 #include "libsoc_board.h"
 #include "ladder.h"
 
+#define MAX_INPUT 		4
+#define MAX_OUTPUT 		4
+
 //inBufferPinMask: pin mask for each input, which
 //means what pin is mapped to that OpenPLC input
-int inBufferPinMask[MAX_INPUT] = {};
+const char  *inBufferPinMask[MAX_INPUT] = { "52", "50", "15", "132" };
 
 //outBufferPinMask: pin mask for each output, which
 //means what pin is mapped to that OpenPLC output
-int outBufferPinMask[MAX_OUTPUT] =	{};
-
-//analogOutBufferPinMask: pin mask for the analog PWM
-//output of the RaspberryPi
-int analogOutBufferPinMask[MAX_ANALOG_OUT] = {};
+const char *outBufferPinMask[MAX_OUTPUT] =	{ "53", "51", "11", "166" };
 
 gpio *input_gpio = NULL;
 gpio *output_gpio = NULL;
@@ -65,43 +65,49 @@ void initializeHardware()
 {
 	uint32_t ret = 0;
 
-	config = libsoc_board_init();
+    int fd;
+    int i;
+    char input_path[33];
+    char output_path[33];
 
-	printf("Iniciou \n");
-	input_gpio = libsoc_gpio_request(libsoc_board_gpio_id(config, "SODIMM_103"), LS_GPIO_SHARED);
-	if (input_gpio == NULL) {
-		perror("input request failed");
-		goto exit;
-	}
-	printf("Exportou \n");
-	output_gpio = libsoc_gpio_request(libsoc_board_gpio_id(config, "SODIMM_101"), LS_GPIO_SHARED);
-	if (output_gpio == NULL) {
-		perror("output gpio request failed");
-		goto exit;
-	}
-	ret = libsoc_gpio_set_direction(input_gpio, INPUT);
-	if (ret == EXIT_FAILURE) {
-		perror("Failed to set input gpio direction");
-		goto exit;
-	}
-	ret = libsoc_gpio_set_direction(output_gpio, OUTPUT);
-	if (ret == EXIT_FAILURE) {
-		perror("Failed to set output gpio direction");
-		goto exit;
-	}
-exit:
-	if (input_gpio) {
-		ret = libsoc_gpio_free(input_gpio);
-		if (ret == EXIT_FAILURE)
-			perror("Could not free gpio");
-	}
+    for (i = 0; i < MAX_INPUT; i++)
+    {
+        strcpy(input_path, "/sys/class/gpio/gpio");
+        strcat(input_path, inBufferPinMask[i]);
+        strcat(input_path, "/direction");
 
-	if (output_gpio) {
-		ret = libsoc_gpio_free(output_gpio);
-		if (ret == EXIT_FAILURE)
-			perror("Could not free led gpio");
-	}
-	return ret;
+        // export GPIO
+        fd = open("/sys/class/gpio/export", O_WRONLY);
+        write(fd, inBufferPinMask[i], 3);
+        close(fd);
+    
+        // Configure as input
+        fd = open(input_path, O_WRONLY);
+        write(fd, "in", 2);
+        close(fd);
+
+        memset(input_path, 0, sizeof input_path);
+    }
+
+    for (i = 0; i < MAX_OUTPUT; i++)
+    {
+        strcpy(output_path, "/sys/class/gpio/gpio");
+        strcat(output_path, outBufferPinMask[i]);
+        strcat(output_path, "/direction");
+
+        // export GPIO
+        fd = open("/sys/class/gpio/export", O_WRONLY);
+        write(fd, outBufferPinMask[i], 3);
+        close(fd);
+    
+        // Configure as output
+        fd = open(output_path, O_WRONLY);
+        write(fd, "out", 3);
+        close(fd);
+
+        memset(output_path, 0, sizeof output_path);
+    }
+
 }
 
 //-----------------------------------------------------------------------------
@@ -113,9 +119,26 @@ void updateBuffersIn()
 {
 	pthread_mutex_lock(&bufferLock); //lock mutex
 
-	if (bool_input[0][0] != NULL) *bool_input[0][0] = libsoc_gpio_get_level(input_gpio);
+    int fd;
+    int value;
+    char pin_path[28];
 
-	pthread_mutex_unlock(&bufferLock); //unlock mutex
+    for (int i = 0; i < MAX_OUTPUT; i++)
+    {
+        strcpy(pin_path, "/sys/class/gpio/gpio");
+        strcat(pin_path, inBufferPinMask[i]);
+        strcat(pin_path, "/value");
+
+        fd = open(pin_path, O_RDONLY);
+        read(fd, &value, 1); // read GPIO value
+        if (bool_input[i/8][i%8] != NULL) *bool_input[i/8][i%8] = value;
+        close(fd); //close value file
+
+        printf("o valor da entrada é %s \n", pin_path);
+
+        memset(pin_path, 0, sizeof pin_path);
+    }
+    pthread_mutex_unlock(&bufferLock); //unlock mutex
 }
 
 //-----------------------------------------------------------------------------
@@ -126,8 +149,25 @@ void updateBuffersIn()
 void updateBuffersOut()
 {
 	pthread_mutex_lock(&bufferLock); //lock mutex
-	printf(bool_output[0][0]);
-	if (bool_output[0][0] != NULL) libsoc_gpio_set_level(output_gpio, *bool_output[0][0]);
 
-	pthread_mutex_unlock(&bufferLock); //unlock mutex
+    int fd;
+    char pin_path[28];
+
+    for (int i = 0; i < MAX_OUTPUT; i++)
+    {
+        strcpy(pin_path, "/sys/class/gpio/gpio");
+        strcat(pin_path, outBufferPinMask[i]);
+        strcat(pin_path, "/value");
+
+        fd = open(pin_path, O_WRONLY | O_SYNC);
+        if (bool_output[i/8][i%8] != NULL) write(fd, bool_output[i/8][i%8], 1);
+        close(fd);
+
+        printf("o valor da saída é %s \n", pin_path);
+
+        memset(pin_path, 0, sizeof pin_path);
+    }
+
+    pthread_mutex_unlock(&bufferLock); //unlock mutex
+
 }
