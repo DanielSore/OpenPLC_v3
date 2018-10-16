@@ -42,16 +42,16 @@
 #include "libsoc_board.h"
 #include "ladder.h"
 
-#define MAX_INPUT 		4
-#define MAX_OUTPUT 		4
+#define MAX_INPUT 		3
+#define MAX_OUTPUT 		3
 
 //inBufferPinMask: pin mask for each input, which
 //means what pin is mapped to that OpenPLC input
-const char  *inBufferPinMask[MAX_INPUT] = { "52", "50", "15", "132" };
+const char  *inBufferPinMask[MAX_INPUT] = { "15", "35", "52" };
 
 //outBufferPinMask: pin mask for each output, which
 //means what pin is mapped to that OpenPLC output
-const char *outBufferPinMask[MAX_OUTPUT] =	{ "53", "51", "11", "166" };
+const char *outBufferPinMask[MAX_OUTPUT] =	{ "53", "50", "166" };
 
 gpio *input_gpio = NULL;
 gpio *output_gpio = NULL;
@@ -72,6 +72,7 @@ void initializeHardware()
 
     for (i = 0; i < MAX_INPUT; i++)
     {
+        // concatenates the path
         strcpy(input_path, "/sys/class/gpio/gpio");
         strcat(input_path, inBufferPinMask[i]);
         strcat(input_path, "/direction");
@@ -81,16 +82,18 @@ void initializeHardware()
         write(fd, inBufferPinMask[i], 3);
         close(fd);
     
-        // Configure as input
+        // configure as input
         fd = open(input_path, O_WRONLY);
         write(fd, "in", 2);
         close(fd);
 
+        // clear the path
         memset(input_path, 0, sizeof input_path);
     }
 
     for (i = 0; i < MAX_OUTPUT; i++)
     {
+        // concatenates the path
         strcpy(output_path, "/sys/class/gpio/gpio");
         strcat(output_path, outBufferPinMask[i]);
         strcat(output_path, "/direction");
@@ -100,11 +103,12 @@ void initializeHardware()
         write(fd, outBufferPinMask[i], 3);
         close(fd);
     
-        // Configure as output
+        // configure as output
         fd = open(output_path, O_WRONLY);
         write(fd, "out", 3);
         close(fd);
 
+        // clear the path
         memset(output_path, 0, sizeof output_path);
     }
 
@@ -120,24 +124,25 @@ void updateBuffersIn()
 	pthread_mutex_lock(&bufferLock); //lock mutex
 
     int fd;
-    int value;
+    char value;
     char pin_path[28];
 
     for (int i = 0; i < MAX_OUTPUT; i++)
     {
+        // concatenates the path
         strcpy(pin_path, "/sys/class/gpio/gpio");
         strcat(pin_path, inBufferPinMask[i]);
-        strcat(pin_path, "/value");
+        strcat(pin_path, "/value"); 
 
         fd = open(pin_path, O_RDONLY);
         read(fd, &value, 1); // read GPIO value
-        if (bool_input[i/8][i%8] != NULL) *bool_input[i/8][i%8] = value;
+        if (bool_input[i/8][i%8] != NULL) *bool_input[i/8][i%8] = value-48;
         close(fd); //close value file
 
-        printf("o valor da entrada é %s \n", pin_path);
-
+        // clear the path
         memset(pin_path, 0, sizeof pin_path);
     }
+
     pthread_mutex_unlock(&bufferLock); //unlock mutex
 }
 
@@ -151,20 +156,24 @@ void updateBuffersOut()
 	pthread_mutex_lock(&bufferLock); //lock mutex
 
     int fd;
+    int asciiValue;
     char pin_path[28];
 
     for (int i = 0; i < MAX_OUTPUT; i++)
     {
+        // concatenates the path
         strcpy(pin_path, "/sys/class/gpio/gpio");
         strcat(pin_path, outBufferPinMask[i]);
         strcat(pin_path, "/value");
 
         fd = open(pin_path, O_WRONLY | O_SYNC);
-        if (bool_output[i/8][i%8] != NULL) write(fd, bool_output[i/8][i%8], 1);
+        if (bool_output[i/8][i%8] != NULL) {
+            asciiValue = *bool_output[i/8][i%8]+48;
+            write(fd, &asciiValue, 1);
+        }
         close(fd);
 
-        printf("o valor da saída é %s \n", pin_path);
-
+        // clear the path
         memset(pin_path, 0, sizeof pin_path);
     }
 
